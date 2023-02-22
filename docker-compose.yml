@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:13
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      - POSTGRES_USER=any_user
+      - POSTGRES_PASSWORD=any_password
+      - POSTGRES_DB=web3Identity
+    ports:
+      - 5432:5432
+
+  nginx:
+    image: ${NGINX_IMAGE:-bn-api-nginx}
+    build:
+      context: ./nginx
+      target: ${BUILD_TARGET:-dev}
+    ports:
+      - 443:443
+    command: ./run.sh
+    depends_on:
+      - django
+    environment:
+      - DEBUG=1
+      - SECRET_KEY=foo
+      - DJANGO_ALLOWED_HOSTS=*
+      - SQL_ENGINE=django.db.backends.postgresql
+      - SQL_DATABASE=web3Identity
+      - SQL_USER=any_user
+      - SQL_PASSWORD=any_password
+      - SQL_HOST=db
+      - SQL_PORT=5432
+      - DATABASE=postgres
+      - ENVIRONMENT=dev
+
+  django:
+    image: ${DJANGO_IMAGE:-bn-api-django}
+    build:
+      context: ./django
+      target: ${BUILD_TARGET:-slim}
+    command: ./run.sh
+    volumes:
+      - ./django:/home/django_app/web
+      - ./nginx/static:/home/django_app/web/static
+    ports:
+      - 8000:8000
+    expose:
+      - 8000
+    environment:
+      - DEBUG=1
+      - SECRET_KEY=foo
+      - DJANGO_ALLOWED_HOSTS=*
+      - SQL_ENGINE=django.db.backends.postgresql
+      - SQL_DATABASE=web3Identity
+      - SQL_USER=any_user
+      - SQL_PASSWORD=any_password
+      - SQL_HOST=db
+      - SQL_PORT=5432
+      - DATABASE=postgres
+      - ENVIRONMENT=dev
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
+      - DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CHATBOT_API_AUTH_TOKEN=${CHATBOT_API_AUTH_TOKEN}
+    depends_on:
+      - db
+
+  ##################################################
+  # Container for opening shells into ECS containers
+  ##################################################
+  ecs-shell:
+    build: ./scripts/ecs_exec
+    command: echo  # Give the service a dummy default command since it's required for dcup -d
+    volumes:
+      - ~/.aws:/root/.aws
+      - ./connect.sh:/aws/connect.sh
+    entrypoint: ''  # change the default command from "aws <foo> to /bin/bash"
+    environment:
+      - AWS_PROFILE=${AWS_PROFILE:-default}
+
+
+volumes:
+  postgres_data:
